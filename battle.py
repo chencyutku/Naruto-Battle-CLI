@@ -9,6 +9,7 @@ import threading
 
 # import basic tools
 import random
+import time
 
 # import third-party package
 import cv2
@@ -32,7 +33,9 @@ import numpy as np
 
 # 設定
 two_player = False
-
+play_round = 3
+# Only admit mudra if the probability greater than 70%
+qualification = 0.6
 
 
 
@@ -123,6 +126,45 @@ best_model    = os.path.join(model_dir, best_model)
 #endregion  [Global]
 
 
+#region     [Declare Object]
+
+
+# 接收攝影機串流影像，採用多執行緒的方式，降低緩衝區堆疊圖幀的問題。
+class Camera:
+    def __init__(self, webcam):
+        self.Frame = []
+        self.status = False
+        self.isstop = False
+		
+	# 攝影機連接。
+        self.capture = cv2.VideoCapture(webcam)
+        self.capture.set(cv2.CAP_PROP_FRAME_WIDTH,  160)
+        self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 120)
+        self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 2)
+
+    def start(self):
+	# 把程式放進子執行緒，daemon=True 表示該執行緒會隨著主執行緒關閉而關閉。
+        print('ipcam started!')
+        threading.Thread(target=self.queryframe, daemon=True, args=()).start()
+
+    def stop(self):
+	# 記得要設計停止無限迴圈的開關。
+        self.isstop = True
+        print('ipcam stopped!')
+   
+    def getframe(self):
+	# 當有需要影像時，再回傳最新的影像。
+        return self.Frame
+        
+    def queryframe(self):
+        while (not self.isstop):
+            self.status, self.Frame = self.capture.read()
+        
+        self.capture.release()
+
+
+#endregion  [Declare Object]
+
 
 #region     [Declare Function]
 
@@ -199,16 +241,32 @@ def wait_queue_if_not_empty(q:queue):
         wait = q.empty()
 
 
+def show_victory(player:str):
+
+    img = np.zeros((600, 600, 3), np.uint8)
+    img.fill(90)
+
+    text = "player " + player + " win the game !!!"
+
+    cv2.putText(img, text, (300, 300), cv2.FONT_HERSHEY_SIMPLEX,  1, (0, 255, 255), 1, cv2.LINE_AA)
+    cv2.namedWindow('win')
+    cv2.moveWindow('win', 660, 240)
+    cv2.startWindowThread()
+    cv2.imshow('win', img)
+
+    cv2.waitkey(3000)
+    cv2.destroyAllWindows()
+
+
 def detect_mudra(webcam:int, player:str, target_queue:queue.Queue, answer_queue:queue.Queue):
     # Continuous detect mudra from webcam
 
     # Only admit mudra if the probability greater than 70%
-    qualification = 0.7
+    global qualification
 
-    camera = cv2.VideoCapture(webcam)
-    camera.set(cv2.CAP_PROP_FRAME_WIDTH,  160)
-    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 120)
-    camera.set(cv2.CAP_PROP_BUFFERSIZE, 5)
+    camera = Camera(webcam)
+    camera.start()
+    time.sleep(1)
 
     global end_game
     while end_game == False:
@@ -216,13 +274,17 @@ def detect_mudra(webcam:int, player:str, target_queue:queue.Queue, answer_queue:
         # print("detect")
 
         # 從WebCam讀取一張圖片
-        success, frame = camera.read()
-        # 成功read到圖片則顯示圖片
-        if success:
-            cv2.startWindowThread()
-            cv2.imshow('frame', frame)
+        frame = camera.getframe()
+        frame_show = cv2.resize(frame, (600, 450))
+        cv2.namedWindow(player)        # Create a named window
+        if player == 'A':
+            cv2.moveWindow(player, 40,540)  # Move it to (40,30)
+        else:
+            cv2.moveWindow(player, 1480,540)
+        cv2.startWindowThread()
+        cv2.imshow(player, frame_show)
         
-        cv2.waitKey(16)
+        cv2.waitKey(1)
 
         wait_queue_if_empty(target_queue)
 
@@ -244,7 +306,7 @@ def detect_mudra(webcam:int, player:str, target_queue:queue.Queue, answer_queue:
         
         answer_queue.put('none')
     
-    
+    camera.stop()
     cv2.destroyWindow('frame')
 
 
@@ -283,13 +345,14 @@ def play(webcam:int, player:str, target_queue:queue.Queue, answer_queue:queue.Qu
         judge_mudra(target_queue, answer_queue)
         ninjutsu_complete_int += 1
 
-        if ninjutsu_complete_int >= 5:
+        if ninjutsu_complete_int >= play_round:
+            show_victory(player)
             end_game = True
 
     detect_mudra_thread.join()
 
 
-def show_target_mudra(target_queue:queue.Queue):
+def show_target_mudra(player:str, target_queue:queue.Queue):
     # 根據忍術顯示第(1~5)張
         # 傳輸WebCam影像給神經網路
         # 神經網路回傳判斷機率
@@ -299,6 +362,10 @@ def show_target_mudra(target_queue:queue.Queue):
     global Mudra_dir_path
     global Ninjutsu_List
 
+    if player == 'A':
+        pos_x, pos_y = 0,0
+    else:
+        pos_x, pos_y = 1520,0
     for Ninjutsu_str in Ninjutsu_List:
 
         for mudra_str in Ninjutsu_mudras_dict[Ninjutsu_str]:
@@ -309,6 +376,11 @@ def show_target_mudra(target_queue:queue.Queue):
             # if os.path.isfile(Mudra_img_path):
             Mudra_img = cv2.imread(Mudra_img_path)
             # cv2.startWindowThread()
+            
+            Mudra_img = cv2.resize(Mudra_img, (400, 300))
+            cv2.namedWindow(Ninjutsu_str)        # Create a named window
+            cv2.moveWindow(Ninjutsu_str, pos_x, pos_y)
+            cv2.startWindowThread()
             cv2.imshow(Ninjutsu_str, Mudra_img)
             cv2.waitKey(500)
 
@@ -339,17 +411,17 @@ if two_player:
 
 # while global end_game == False:
 
-# 隨機產生5個指定忍術
-for i in range(5):
+# 隨機產生play_round個指定忍術
+for i in range(play_round):
     Ninjutsu_str = random.choice(str().join(Ninjutsu_mudras_dict.keys()))
     Ninjutsu_List.extend(Ninjutsu_str)
 
 # print("忍術題目：", Ninjutsu_List)
 
-show_target_mudra_A_t = threading.Thread(target=show_target_mudra, args=(target_queue_A,))
+show_target_mudra_A_t = threading.Thread(target=show_target_mudra, args=('A', target_queue_A))
 show_target_mudra_A_t.start()
 if two_player:
-    show_target_mudra_B_t = threading.Thread(target=show_target_mudra, args=(target_queue_B,))
+    show_target_mudra_B_t = threading.Thread(target=show_target_mudra, args=('B', target_queue_B))
     show_target_mudra_B_t.start()
 
 

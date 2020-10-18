@@ -208,11 +208,12 @@ def detect_mudra(webcam:int, player:str, target_queue:queue.Queue, answer_queue:
     camera = cv2.VideoCapture(webcam)
     camera.set(cv2.CAP_PROP_FRAME_WIDTH,  160)
     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 120)
+    camera.set(cv2.CAP_PROP_BUFFERSIZE, 5)
 
     global end_game
     while end_game == False:
 
-        print("detect")
+        # print("detect")
 
         # 從WebCam讀取一張圖片
         success, frame = camera.read()
@@ -221,7 +222,7 @@ def detect_mudra(webcam:int, player:str, target_queue:queue.Queue, answer_queue:
             cv2.startWindowThread()
             cv2.imshow('frame', frame)
         
-        cv2.waitKey(50)
+        cv2.waitKey(16)
 
         wait_queue_if_empty(target_queue)
 
@@ -254,7 +255,7 @@ def judge_mudra(target_queue:queue.Queue, answer_queue:queue.Queue):
     mudra_order = 0
     while end_ninjutsu == False:
 
-        print("judge")
+        # print("judge")
 
         wait_queue_if_empty(target_queue)
         target_mudra = target_queue.queue[0]
@@ -303,7 +304,7 @@ def show_target_mudra(target_queue:queue.Queue):
         for mudra_str in Ninjutsu_mudras_dict[Ninjutsu_str]:
 
             Mudra_img_path = os.path.join(Mudra_dir_path, (mudra_str + '.jpg'))
-            print("show [", mudra_str, "] picture:")
+            # print("show [", mudra_str, "] picture:")
             print(Mudra_img_path)
             # if os.path.isfile(Mudra_img_path):
             Mudra_img = cv2.imread(Mudra_img_path)
@@ -343,7 +344,7 @@ for i in range(5):
     Ninjutsu_str = random.choice(str().join(Ninjutsu_mudras_dict.keys()))
     Ninjutsu_List.extend(Ninjutsu_str)
 
-print("忍術題目：", Ninjutsu_List)
+# print("忍術題目：", Ninjutsu_List)
 
 show_target_mudra_A_t = threading.Thread(target=show_target_mudra, args=(target_queue_A,))
 show_target_mudra_A_t.start()

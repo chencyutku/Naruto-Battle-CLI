@@ -19,8 +19,6 @@ import cv2
 #region     [Global]
 label_list = globalvar.label_list
 purpose_dict = globalvar.purpose_dict
-original_dataset_dir = globalvar.original_dataset_dir
-dataset_dir = globalvar.dataset_dir
 workspace_dir = globalvar.workspace_dir
 
 
